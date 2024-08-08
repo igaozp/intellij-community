@@ -16,7 +16,8 @@ import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.idea.base.analysis.api.utils.KtSymbolFromIndexProvider
 import org.jetbrains.kotlin.idea.base.analysis.api.utils.shortenReferencesInRange
-import org.jetbrains.kotlin.idea.completion.*
+import org.jetbrains.kotlin.idea.completion.ItemPriority
+import org.jetbrains.kotlin.idea.completion.KOTLIN_CAST_REQUIRED_COLOR
 import org.jetbrains.kotlin.idea.completion.contributors.helpers.CallableMetadataProvider
 import org.jetbrains.kotlin.idea.completion.contributors.helpers.CompletionSymbolOrigin
 import org.jetbrains.kotlin.idea.completion.contributors.helpers.KtSymbolWithOrigin
@@ -26,6 +27,7 @@ import org.jetbrains.kotlin.idea.completion.impl.k2.context.FirBasicCompletionCo
 import org.jetbrains.kotlin.idea.completion.lookups.CallableInsertionOptions
 import org.jetbrains.kotlin.idea.completion.lookups.ImportStrategy
 import org.jetbrains.kotlin.idea.completion.lookups.factories.KotlinFirLookupElementFactory
+import org.jetbrains.kotlin.idea.completion.priority
 import org.jetbrains.kotlin.idea.completion.weighers.CallableWeigher.callableWeight
 import org.jetbrains.kotlin.idea.completion.weighers.Weighers
 import org.jetbrains.kotlin.idea.completion.weighers.Weighers.applyWeighsToLookupElement
@@ -46,26 +48,13 @@ internal abstract class FirCompletionContributorBase<C : KotlinRawPositionContex
     protected val parameters: CompletionParameters get() = basicContext.parameters
     protected val sink: LookupElementSink = basicContext.sink.withPriority(priority)
     protected val originalKtFile: KtFile get() = basicContext.originalKtFile
-    protected val fakeKtFile: KtFile get() = basicContext.fakeKtFile
     protected val project: Project get() = basicContext.project
     protected val targetPlatform: TargetPlatform get() = basicContext.targetPlatform
     protected val symbolFromIndexProvider: KtSymbolFromIndexProvider get() = basicContext.symbolFromIndexProvider
-    protected val lookupElementFactory: KotlinFirLookupElementFactory get() = basicContext.lookupElementFactory
     protected val importStrategyDetector: ImportStrategyDetector get() = basicContext.importStrategyDetector
-    protected val visibleScope = basicContext.visibleScope
-
 
     protected val scopeNameFilter: (Name) -> Boolean =
         { name -> !name.isSpecial && prefixMatcher.prefixMatches(name.identifier) }
-
-    context(KaSession)
-    protected fun addSymbolToCompletion(expectedType: KaType?, symbol: KaSymbol) {
-        if (symbol !is KaNamedSymbol) return
-
-        lookupElementFactory
-            .createLookupElement(symbol, importStrategyDetector, expectedType = expectedType)
-            .let(sink::addElement)
-    }
 
     context(KaSession)
     protected fun addClassifierSymbolToCompletion(
@@ -76,7 +65,7 @@ internal abstract class FirCompletionContributorBase<C : KotlinRawPositionContex
     ) {
         if (symbol !is KaNamedSymbol) return
 
-        val lookup = with(lookupElementFactory) {
+        val lookup = with(KotlinFirLookupElementFactory) {
             when (symbol) {
                 is KaClassLikeSymbol -> createLookupElementForClassLikeSymbol(symbol, importingStrategy)
                 is KaTypeParameterSymbol -> createLookupElement(symbol, importStrategyDetector)
@@ -97,16 +86,18 @@ internal abstract class FirCompletionContributorBase<C : KotlinRawPositionContex
         priority: ItemPriority? = null,
         explicitReceiverTypeHint: KaType? = null,
     ) {
-        val symbol = signature.symbol
-        val name = when (symbol) {
-            is KaNamedSymbol -> symbol.name
-            is KaConstructorSymbol -> (symbol.containingDeclaration as? KaNamedClassSymbol)?.name
+        val namedSymbol = when (val symbol = signature.symbol) {
+            is KaNamedSymbol -> symbol
+            is KaConstructorSymbol -> symbol.containingDeclaration as? KaNamedClassSymbol
             else -> null
         } ?: return
 
-        val lookup = lookupElementFactory.createCallableLookupElement(name, signature, options, context.expectedType)
-
-        priority?.let { lookup.priority = it }
+        val lookup = KotlinFirLookupElementFactory.createCallableLookupElement(
+            name = namedSymbol.name,
+            signature = signature,
+            options = options,
+            expectedType = context.expectedType,
+        ).apply { this.priority = priority }
 
         Weighers.applyWeighsToLookupElementForCallable(context, lookup, signature, symbolOrigin)
         sink.addElement(lookup.adaptToReceiver(context, explicitReceiverTypeHint?.render(position = Variance.INVARIANT)))

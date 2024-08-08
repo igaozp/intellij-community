@@ -103,7 +103,8 @@ public final class IdentifierHighlighterPass {
           highlightReferencesAndDeclarations();
         });
       }
-      catch (IndexNotReadyException ignored) {
+      catch (IndexNotReadyException e) {
+        logIndexNotReadyException(e);
         // Ignoring IndexNotReadyException.
         // We can't show a warning because this usage search is triggered automatically and user does not control it.
       }
@@ -231,7 +232,8 @@ public final class IdentifierHighlighterPass {
         return fromHostFile;
       }
     }
-    catch (IndexNotReadyException ignored) {
+    catch (IndexNotReadyException e) {
+      logIndexNotReadyException(e);
     }
     //noinspection deprecation
     Editor injectedEditor = InjectedLanguageUtil.getEditorForInjectedLanguageNoCommit(myEditor, myFile, myCaretOffset);
@@ -244,18 +246,23 @@ public final class IdentifierHighlighterPass {
   }
 
   private void highlightTargetUsages(@NotNull Symbol target) {
-    AstLoadingFilter.disallowTreeLoading(() -> {
-      UsageRanges ranges = getUsageRanges(myFile, target);
-      if (ranges == null) {
-        return;
-      }
-      myReadAccessRanges.addAll(ranges.getReadRanges());
-      myReadAccessRanges.addAll(ranges.getReadDeclarationRanges());
-      myWriteAccessRanges.addAll(ranges.getWriteRanges());
-      myWriteAccessRanges.addAll(ranges.getWriteDeclarationRanges());
-    }, () -> "Currently highlighted file: \n" +
-             "psi file: " + myFile + ";\n" +
-             "virtual file: " + myFile.getVirtualFile());
+    try {
+      AstLoadingFilter.disallowTreeLoading(() -> {
+        UsageRanges ranges = getUsageRanges(myFile, target);
+        if (ranges == null) {
+          return;
+        }
+        myReadAccessRanges.addAll(ranges.getReadRanges());
+        myReadAccessRanges.addAll(ranges.getReadDeclarationRanges());
+        myWriteAccessRanges.addAll(ranges.getWriteRanges());
+        myWriteAccessRanges.addAll(ranges.getWriteDeclarationRanges());
+      }, () -> "Currently highlighted file: \n" +
+               "psi file: " + myFile + ";\n" +
+               "virtual file: " + myFile.getVirtualFile());
+    }
+    catch (IndexNotReadyException e) {
+      logIndexNotReadyException(e);
+    }
   }
 
   private static volatile int id;
@@ -345,6 +352,12 @@ public final class IdentifierHighlighterPass {
       if (info.type == HighlightInfoType.ELEMENT_UNDER_CARET_READ || info.type == HighlightInfoType.ELEMENT_UNDER_CARET_WRITE) {
         highlighter.dispose();
       }
+    }
+  }
+
+  private static void logIndexNotReadyException(@NotNull IndexNotReadyException e) {
+    if (LOG.isTraceEnabled()) {
+      LOG.trace(e);
     }
   }
 }

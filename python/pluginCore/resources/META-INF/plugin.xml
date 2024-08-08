@@ -24,6 +24,7 @@ The Python plug-in provides smart editing for Python scripts. The feature set of
   <dependencies>
     <plugin id="com.intellij.modules.lang"/>
     <plugin id="com.intellij.modules.python-core-capable"/>
+    <plugin id="com.intellij.modules.json"/>
     <plugin id="org.toml.lang"/>
   </dependencies>
 
@@ -88,6 +89,7 @@ The Python plug-in provides smart editing for Python scripts. The feature set of
                      key="INSP.requirement.uninstalled.name" groupKey="INSP.GROUP.requirements" enabledByDefault="true" level="WARNING"
                      implementationClass="com.jetbrains.python.requirements.UnsatisfiedRequirementInspection"/>
 
+    <pluginSuggestionProvider order="first" implementation="com.jetbrains.python.suggestions.PycharmProSuggestionProvider"/>
   </extensions>
 
 
